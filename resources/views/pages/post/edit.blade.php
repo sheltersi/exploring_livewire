@@ -2,10 +2,11 @@
 
 use App\Models\Post;
 use Illuminate\Support\Str;
-use Livewire\Component;
 
 new class extends Component
 {
+    public Post $post;
+
     public string $title = '';
 
     public string $slug = '';
@@ -24,37 +25,59 @@ new class extends Component
 
     public string $meta_description = '';
 
-    protected $rules = [
-        'title' => 'required|max:255',
-        'slug' => 'required|max:255|unique:posts,slug',
-        'excerpt' => 'nullable|max:500',
-        'content' => 'required',
-        'category' => 'nullable|max:100',
-        'featured_image' => 'nullable|url|max:500',
-        'status' => 'required|in:draft,published',
-        'meta_title' => 'nullable|max:100',
-        'meta_description' => 'nullable|max:160',
-    ];
+    public function mount(Post $post)
+    {
+        if (auth()->id() !== $post->user_id) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $this->post = $post;
+        $this->title = $post->title;
+        $this->slug = $post->slug;
+        $this->excerpt = $post->excerpt ?? '';
+        $this->content = $post->content;
+        $this->category = $post->category ?? '';
+        $this->featured_image = $post->featured_image ?? '';
+        $this->status = $post->status;
+        $this->meta_title = $post->meta_title ?? '';
+        $this->meta_description = $post->meta_description ?? '';
+    }
+
+    protected function rules()
+    {
+        return [
+            'title' => 'required|max:255',
+            'slug' => 'required|max:255|unique:posts,slug,'.$this->post->id,
+            'excerpt' => 'nullable|max:500',
+            'content' => 'required',
+            'category' => 'nullable|max:100',
+            'featured_image' => 'nullable|url|max:500',
+            'status' => 'required|in:draft,published',
+            'meta_title' => 'nullable|max:100',
+            'meta_description' => 'nullable|max:160',
+        ];
+    }
 
     public function updatedTitle($value)
     {
-        $this->slug = Str::slug($value);
+        if ($this->slug === Str::slug($this->post->title)) {
+            $this->slug = Str::slug($value);
+        }
     }
 
     public function save()
     {
         $validated = $this->validate();
 
-        $validated['user_id'] = auth()->id();
-
-        if ($this->status === 'published') {
+        if ($this->status === 'published' && ! $this->post->published_at) {
             $validated['published_at'] = now();
         }
 
-        Post::create($validated);
+        $this->post->update($validated);
 
-        $this->reset();
-        session()->flash('message', 'Post created successfully.');
+        session()->flash('message', 'Post updated successfully.');
+
+        return redirect()->route('dashboard');
     }
 };
 
@@ -63,8 +86,18 @@ new class extends Component
 <div class="max-w-4xl mx-auto py-10">
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div class="px-6 py-5 border-b border-gray-200 bg-gray-50">
-            <h2 class="text-xl font-semibold text-gray-800">Create New Post</h2>
-            <p class="mt-1 text-sm text-gray-500">Fill in the details below to create a new blog post.</p>
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-xl font-semibold text-gray-800">Edit Post</h2>
+                    <p class="mt-1 text-sm text-gray-500">Update your blog post details.</p>
+                </div>
+                <a href="{{ route('dashboard') }}" class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                    </svg>
+                    Back
+                </a>
+            </div>
         </div>
 
         @if (session()->has('message'))
@@ -162,18 +195,18 @@ new class extends Component
             </div>
 
             <div class="flex items-center justify-end gap-3 pt-6 border-t border-gray-200">
-                <button type="button" wire:click="reset()"
+                <a href="{{ route('dashboard') }}"
                     class="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors">
                     Cancel
-                </button>
+                </a>
                 <button type="submit"
                     class="px-6 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors flex items-center gap-2">
                     <svg wire:loading wire:target="save" class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    <span wire:loading.remove wire:target="save">Save Post</span>
-                    <span wire:loading wire:target="save">Saving...</span>
+                    <span wire:loading.remove wire:target="save">Update Post</span>
+                    <span wire:loading wire:target="save">Updating...</span>
                 </button>
             </div>
         </form>
